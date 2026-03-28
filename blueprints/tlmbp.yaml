@@ -1,0 +1,411 @@
+blueprint:
+  name: TLMBP – The Last Motion Blueprint
+  description: >
+    # TLMBP – The Last Motion Blueprint
+
+    A motion automation blueprint that actually knows when to step back.
+
+    Based on YAMA V10 — extended with context-aware manual override detection,
+    a restructured automation blocker, and improved scene handling.
+
+    ## Features
+    - Multiple motion/presence sensors per instance
+    - Four time-based scenes (Morning / Day / Evening / Night)
+    - Midnight-spanning night block (e.g. 22:00 → 06:00)
+    - Illuminance cutoff — only trigger when dark enough
+    - Configurable trigger delay for slow Zigbee/Hue sensors
+    - Automation Blocker — completely suppress the automation (e.g. someone sleeping)
+    - Manual Override Detection — works with Alexa (Nabu Casa) and HA UI
+    - Graceful fallback to direct turn_on when no scene is configured
+    - Fully optional features — use only what you need
+
+    ## Manual Override Detection
+    If a reference entity is configured, the automation checks context.parent_id
+    to detect whether the light was last changed by this automation or by a user.
+
+    - parent_id is set → automation was last in control → proceed normally
+    - parent_id is None → user (UI) or Alexa via Nabu Casa → override active:
+        * MOTION ON:  scene/brightness will NOT be overridden
+        * MOTION OFF: light will NOT be turned off
+
+    The override clears automatically once the light is turned off completely.
+    No helpers, no extra automations, no timers needed.
+
+    ## Automation Blocker
+    Completely suppresses the entire automation — both turn-on and turn-off.
+    Use case: someone is sleeping in the room, no motion reaction at all.
+
+  domain: automation
+  source_url: https://github.com/Manu4771/ha-TLMBP-The-Last-Motion-Blueprint-/blob/main/blueprints/tlmbp.yaml
+
+  input:
+
+    # ══════════════════════════════════════════
+    # TRIGGER
+    # ══════════════════════════════════════════
+    motion_entity:
+      name: Trigger
+      description: Motion / Presence Sensor
+      selector:
+        entity:
+          multiple: true
+
+    motion_delay:
+      name: Trigger delay
+      description: Optional delay to allow sensors (e.g. Zigbee/Hue) to update values
+      default: 500
+      selector:
+        number:
+          min: 0
+          max: 3000
+          unit_of_measurement: milliseconds
+
+    light_target:
+      name: Target
+      description: Light / Switch / Actor
+      selector:
+        target:
+
+    # ══════════════════════════════════════════
+    # ILLUMINANCE
+    # ══════════════════════════════════════════
+    illuminance_sensor:
+      name: (OPTIONAL) Illuminance sensor
+      default:
+      selector:
+        entity:
+          domain: sensor
+          device_class: illuminance
+
+    illuminance_cutoff_value:
+      name: (OPTIONAL) Illuminance cutoff value
+      description: Light only turns on if lux is at or below this value
+      default: 999999
+      selector:
+        number:
+          min: 0
+          max: 100000
+          unit_of_measurement: lx
+
+    # ══════════════════════════════════════════
+    # WAIT TIME
+    # ══════════════════════════════════════════
+    no_motion_wait:
+      name: Wait time
+      description: How long to wait after last motion before turning off
+      default: 120
+      selector:
+        number:
+          min: 0
+          max: 3600
+          unit_of_measurement: seconds
+
+    # ══════════════════════════════════════════
+    # AUTOMATION BLOCKER
+    # Blocks the ENTIRE automation (turn-on AND turn-off).
+    # Use case: completely suppress all motion reactions,
+    # e.g. when someone is sleeping in the room.
+    # ══════════════════════════════════════════
+    enable_automation_blocker:
+      name: Automation Blocker – enable
+      description: >
+        Enable or disable the automation blocker.
+        When disabled, the blocker entity is completely ignored.
+        The blocker blocks the entire automation – both turn-on and turn-off.
+      default: true
+      selector:
+        boolean:
+
+    automation_blocker:
+      name: Automation Blocker – Entity
+      description: >
+        (OPTIONAL) Entity used as the blocking condition.
+        Only relevant when the blocker is enabled above.
+      default:
+      selector:
+        entity:
+
+    automation_blocker_boolean:
+      name: Automation Blocker – Logic
+      description: "true = entity must be ON  |  false = entity must be OFF"
+      default: false
+      selector:
+        boolean:
+
+    # ══════════════════════════════════════════
+    # MANUAL OVERRIDE – CONTEXT TRACKING
+    # ══════════════════════════════════════════
+    context_entity:
+      name: (OPTIONAL) Manual Override – Reference Entity
+      description: >
+        A single light entity used to detect manual overrides (via UI or Alexa).
+
+        How it works:
+        The automation checks context.parent_id of this entity:
+        - parent_id is set   → an automation was last in control → proceed normally
+        - parent_id is None  → user (UI) or Alexa was last in control → override active:
+            * MOTION ON:  do NOT change scene or brightness
+            * MOTION OFF: do NOT turn off the light
+
+        The override clears automatically once the light is turned off completely.
+
+        Typical use cases:
+        - Dining room: More lights active than the automation controls → do not turn off.
+        - Living room: Brightness manually set higher than the scene → do not override.
+
+        Leave empty to disable context tracking.
+      default:
+      selector:
+        entity:
+          domain: light
+
+    # ══════════════════════════════════════════
+    # SCENE SELECTION
+    # ══════════════════════════════════════════
+    use_scenes:
+      name: Scene selection – enable
+      description: >
+        Enables time-based scene selection.
+        When disabled, the target is always switched on directly without any scene.
+      default: true
+      selector:
+        boolean:
+
+    # Morning
+    scene_morning:
+      name: (OPTIONAL) Scene – Morning
+      default: scene.none
+      selector:
+        entity:
+          domain: scene
+
+    time_scene_morning:
+      name: Morning – Start time
+      default: "06:00:00"
+      selector:
+        time:
+
+    # Day
+    scene_day:
+      name: (OPTIONAL) Scene – Day
+      default: scene.none
+      selector:
+        entity:
+          domain: scene
+
+    time_scene_day:
+      name: Day – Start time
+      default: "09:00:00"
+      selector:
+        time:
+
+    # Evening
+    scene_evening:
+      name: (OPTIONAL) Scene – Evening
+      default: scene.none
+      selector:
+        entity:
+          domain: scene
+
+    time_scene_evening:
+      name: Evening – Start time
+      default: "18:00:00"
+      selector:
+        time:
+
+    # Night
+    scene_night:
+      name: (OPTIONAL) Scene – Night
+      default: scene.none
+      selector:
+        entity:
+          domain: scene
+
+    time_scene_night:
+      name: Night – Start time
+      default: "22:00:00"
+      selector:
+        time:
+
+
+mode: restart
+max_exceeded: silent
+
+variables:
+  sensors: !input motion_entity
+  lux_sensor: !input illuminance_sensor
+  lux_limit: !input illuminance_cutoff_value
+  automation_blocker: !input automation_blocker
+  automation_blocker_boolean: !input automation_blocker_boolean
+  v_enable_blocker: !input enable_automation_blocker
+  v_use_scenes: !input use_scenes
+  v_context_entity: !input context_entity
+  v_scene_morning: !input scene_morning
+  v_scene_day: !input scene_day
+  v_scene_evening: !input scene_evening
+  v_scene_night: !input scene_night
+
+
+trigger:
+
+  - platform: state
+    entity_id: !input motion_entity
+    from: "off"
+    to: "on"
+
+  - platform: state
+    entity_id: !input motion_entity
+    to: "off"
+
+
+condition:
+
+  # ══════════════════════════════════════════
+  # AUTOMATION BLOCKER (global – blocks entire automation)
+  # Condition is met (automation proceeds) when:
+  #   a) Blocker switch is disabled  OR
+  #   b) No blocker entity is set    OR
+  #   c) Blocker logic matches the entity state
+  # ══════════════════════════════════════════
+  - condition: or
+    conditions:
+      - "{{ not v_enable_blocker }}"
+      - "{{ automation_blocker == none }}"
+      - "{{ automation_blocker_boolean and states[automation_blocker].state == 'on' }}"
+      - "{{ not automation_blocker_boolean and states[automation_blocker].state == 'off' }}"
+
+
+action:
+
+  - choose:
+
+      # ══════════════════════════════════════
+      # MOTION ON
+      # ══════════════════════════════════════
+      - conditions:
+          - "{{ trigger.to_state.state == 'on' }}"
+        sequence:
+
+          - delay:
+              milliseconds: !input motion_delay
+
+          # ── Lux check ───────────────────────────────────────────────────
+          - condition: template
+            value_template: >
+              {% if lux_sensor == none %}
+                true
+              {% else %}
+                {{ states(lux_sensor) | float(0) <= lux_limit }}
+              {% endif %}
+
+          # ── Manual override check (Context Tracking) ────────────────────
+          # Passes (= automation proceeds) when:
+          #   a) No context_entity configured          → tracking disabled
+          #   b) context_entity is currently OFF       → light was off, always turn on
+          #   c) context_entity is ON and parent_id
+          #      is set                                → automation was last in control
+          #
+          # Blocks (= do not override) when:
+          #   context_entity is ON and parent_id is None
+          #   → user (UI) or Alexa was last in control → keep current state
+          # ─────────────────────────────────────────────────────────────────
+          - condition: template
+            value_template: >
+              {% if v_context_entity == none %}
+                true
+              {% elif states(v_context_entity) == 'off' %}
+                true
+              {% else %}
+                {{ states[v_context_entity].context.parent_id is not none }}
+              {% endif %}
+
+          # ── Scene selection ──────────────────────────────────────────────
+          - choose:
+
+              # Morning
+              - conditions:
+                  - "{{ v_use_scenes and v_scene_morning not in [none, 'scene.none'] }}"
+                  - condition: time
+                    after: !input time_scene_morning
+                    before: !input time_scene_day
+                sequence:
+                  - scene: !input scene_morning
+
+              # Day
+              - conditions:
+                  - "{{ v_use_scenes and v_scene_day not in [none, 'scene.none'] }}"
+                  - condition: time
+                    after: !input time_scene_day
+                    before: !input time_scene_evening
+                sequence:
+                  - scene: !input scene_day
+
+              # Evening
+              - conditions:
+                  - "{{ v_use_scenes and v_scene_evening not in [none, 'scene.none'] }}"
+                  - condition: time
+                    after: !input time_scene_evening
+                    before: !input time_scene_night
+                sequence:
+                  - scene: !input scene_evening
+
+              # Night (after night_time OR before morning_time → spans midnight)
+              - conditions:
+                  - "{{ v_use_scenes and v_scene_night not in [none, 'scene.none'] }}"
+                  - condition: or
+                    conditions:
+                      - condition: time
+                        after: !input time_scene_night
+                      - condition: time
+                        before: !input time_scene_morning
+                sequence:
+                  - scene: !input scene_night
+
+            # No scene matched (use_scenes=false OR no scene configured for current time)
+            default:
+              - service: homeassistant.turn_on
+                target: !input light_target
+
+
+      # ══════════════════════════════════════
+      # MOTION OFF
+      # ══════════════════════════════════════
+      - conditions:
+          - "{{ trigger.to_state.state == 'off' }}"
+          - "{{ expand(sensors) | selectattr('state','eq','on') | list | count == 0 }}"
+        sequence:
+
+          - delay:
+              seconds: !input no_motion_wait
+
+          # Re-check: all sensors still clear after wait time
+          - condition: template
+            value_template: >
+              {{ expand(sensors)
+                 | selectattr('state','eq','on')
+                 | list
+                 | count == 0 }}
+
+          # ── Manual override check (Context Tracking) ────────────────────
+          # Passes (= automation turns off) when:
+          #   a) No context_entity configured          → tracking disabled
+          #   b) context_entity is currently OFF       → already off, nothing to do
+          #   c) context_entity is ON and parent_id
+          #      is set                                → automation was last in control
+          #
+          # Blocks (= do not turn off) when:
+          #   context_entity is ON and parent_id is None
+          #   → user (UI) or Alexa was last in control → do not turn off
+          # ─────────────────────────────────────────────────────────────────
+          - condition: template
+            value_template: >
+              {% if v_context_entity == none %}
+                true
+              {% elif states(v_context_entity) == 'off' %}
+                true
+              {% else %}
+                {{ states[v_context_entity].context.parent_id is not none }}
+              {% endif %}
+
+          - service: homeassistant.turn_off
+            target: !input light_target
